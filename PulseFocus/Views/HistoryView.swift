@@ -7,6 +7,9 @@ struct HistoryView: View {
     @Query(sort: \Session.startedAt) private var sessions: [Session]
     @Environment(\.modelContext) private var model
     @State private var selected: Session? = nil
+    @State private var pendingDelete: Session? = nil
+    @State private var showDeleteConfirm: Bool = false
+    @State private var showRecentSheet: Bool = false
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -23,6 +26,12 @@ struct HistoryView: View {
                     .frame(height: 220)
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
+                    SectionCard(title: "近期总结") {
+                        Button("生成近期总结报告") { selected = nil; showAggregateForRecent() }.buttonStyle(.borderedProminent)
+                        Text("基于最近一周或最近10条记录，生成总体总结与建议")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     VStack(spacing: 12) {
                         ForEach(sessions) { s in
                             SectionCard(title: dateString(s.startedAt)) {
@@ -32,14 +41,13 @@ struct HistoryView: View {
                                     Label("平均心率 \(Int(s.heartRateAvg))", systemImage: "heart.fill")
                                 }.font(.system(size: 17))
                                 HStack {
-                                    Button("AI 总结报告") { selected = s }.buttonStyle(.borderedProminent)
                                     Spacer()
-                                    Button(role: .destructive) { deleteSession(s) } label: { Label("删除", systemImage: "trash") }
+                                    Button(role: .destructive) { pendingDelete = s; showDeleteConfirm = true } label: { Label("删除", systemImage: "trash") }
                                     .buttonStyle(.bordered)
                                 }
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) { deleteSession(s) } label: { Label("删除", systemImage: "trash") }
+                                Button(role: .destructive) { pendingDelete = s; showDeleteConfirm = true } label: { Label("删除", systemImage: "trash") }
                             }
                         }
                     }
@@ -48,6 +56,11 @@ struct HistoryView: View {
         }
         .background(LinearGradient(colors: [Color.green.opacity(0.15), Color.purple.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea())
         .sheet(item: $selected) { s in AISummarySheet(app: app, session: s) }
+        .sheet(isPresented: $showRecentSheet) { RecentAISummarySheet(app: app, sessions: recentSessions()) }
+        .confirmationDialog("确认删除该记录？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("删除", role: .destructive) { if let s = pendingDelete { deleteSession(s) } }
+            Button("取消", role: .cancel) { pendingDelete = nil }
+        }
     }
 }
 
@@ -81,6 +94,13 @@ private extension HistoryView {
             model.delete(s)
         }
     }
+    func recentSessions() -> [Session] {
+        let lastWeek = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let list = sessions.filter { $0.startedAt >= lastWeek }
+        if !list.isEmpty { return list }
+        return Array(sessions.suffix(10))
+    }
+    func showAggregateForRecent() { showRecentSheet = true }
 }
 
 private struct EmptyHistoryCard: View {

@@ -9,7 +9,7 @@ final class AppState: ObservableObject {
     @Published var heartRate: Double = 0
     @Published var hrv: Double = 0
     @Published var restingHeartRate: Double = 0
-    @Published var isSimulatedHR: Bool = true
+    @Published var isSimulatedHR: Bool = false
     @Published var showSummary: Bool = false
     @Published var aiAdvice: AIAdvice = .defaultAdvice
     @Published var aiEnabled: Bool = false
@@ -17,6 +17,8 @@ final class AppState: ObservableObject {
     @Published var aiModel: String = "kimi-k2-turbo-preview"
     @Published var aiKeyHeaderName: String = "Authorization"
     @Published var aiKeyPrefix: String = "Bearer "
+    @Published var aiRequireKey: Bool = false
+    @Published var aiPath: String = "/v1/chat/completions"
 }
 
 struct AIAdvice: Equatable {

@@ -13,7 +13,15 @@ final class ConnectivityManager: NSObject, ObservableObject, WCSessionDelegate {
     }
     func send(_ dict: [String: Any]) { if session?.isPaired == true { session?.sendMessage(dict, replyHandler: nil, errorHandler: nil) } }
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
-    func session(_ session: WCSession, didReceiveMessage message: [String : Any]) { DispatchQueue.main.async { self.received = message } }
+    func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
+        DispatchQueue.main.async {
+            self.received = message
+            if let hr = message["hr"] as? Int { HealthManager.shared.heartRate = Double(hr) }
+            if let state = message["state"] as? String {
+                switch state { case "start": HealthManager.shared.start(); case "pause": HealthManager.shared.stop(); default: break }
+            }
+        }
+    }
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) { session.activate() }
     func sessionReachabilityDidChange(_ session: WCSession) {}

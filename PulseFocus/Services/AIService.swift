@@ -36,31 +36,42 @@ struct AIService {
         return await callRemote(prompt: prompt)
     }
     func testConnectivity(prompt: String = "请用一句话回复：连接正常") async -> (Bool, String) {
-        guard let key = apiKey, !key.isEmpty, let url = endpoint.url() else { return (false, "") }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.addValue(endpoint.apiKeyPrefix + key, forHTTPHeaderField: endpoint.apiKeyHeaderName)
-        req.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "model": model,
-            "messages": [["role": "user", "content": prompt]],
-            "temperature": 0.0
-        ]
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
-            if let decoded = try? JSONDecoder().decode(ChatResponse.self, from: data), let content = decoded.choices?.first?.message?.content {
-                return (status == 200 && !(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty), content)
+        func requestOnce(path: String) async -> (Int, Data?) {
+            var ep = endpoint; ep.path = path
+            guard let url = ep.url() else { return (0, nil) }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            if let key = apiKey, !key.isEmpty, !ep.apiKeyHeaderName.isEmpty {
+                req.addValue(ep.apiKeyPrefix + key, forHTTPHeaderField: ep.apiKeyHeaderName)
             }
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let choices = json["choices"] as? [[String: Any]] {
-                let content = (choices.first? ["message"] as? [String: Any])? ["content"] as? String ?? ""
-                return (status == 200 && !(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty), content)
-            }
-            return (status == 200, "")
-        } catch {
-            return (false, "")
+            req.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.addValue("application/json", forHTTPHeaderField: "Accept")
+            let body: [String: Any] = [
+                "model": model,
+                "messages": [["role": "user", "content": prompt]],
+                "temperature": 0.0,
+                "stream": false
+            ]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                return (status, data)
+            } catch { return (0, nil) }
         }
+        // Try configured path, then common Ollama path
+        let candidates = [endpoint.path, "/api/chat"]
+        for p in candidates {
+            let (status, data) = await requestOnce(path: p)
+            if status != 200 { continue }
+            guard let data else { continue }
+            if let content = Self.extractContent(from: data), !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return (true, content)
+            } else {
+                return (false, "HTTP状态: \(status) 无内容")
+            }
+        }
+        return (false, "请求失败或无响应")
     }
     func review(summaryInput: String) async -> (String, [String]) {
         switch provider {
@@ -68,6 +79,9 @@ struct AIService {
             return ("专注完成，保持节奏，注意适度休息。", ["减少中途分心", "优化任务拆解", "放松呼吸稳定心率"])
         case .remote:
             let text = await callRemote(prompt: summaryInput)
+            if let data = text.data(using: .utf8), let json = try? JSONDecoder().decode(AISummaryData.self, from: data) {
+                return (json.summary, json.suggestions)
+            }
             return parseReview(text: text)
         }
     }
@@ -82,30 +96,33 @@ struct AIService {
         }
     }
     private func callRemote(prompt: String) async -> String {
-        guard let key = apiKey, !key.isEmpty else { return "" }
-        guard let url = endpoint.url() else { return "" }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.addValue(endpoint.apiKeyPrefix + key, forHTTPHeaderField: endpoint.apiKeyHeaderName)
-        req.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "model": model,
-            "messages": [["role": "user", "content": prompt]],
-            "temperature": 0.2
-        ]
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        do {
-            let result = try await URLSession.shared.data(for: req)
-            let data = result.0
-            if let decoded = try? JSONDecoder().decode(ChatResponse.self, from: data), let content = decoded.choices?.first?.message?.content, !content.isEmpty {
-                return content
+        func requestOnce(path: String) async -> String {
+            var ep = endpoint; ep.path = path
+            guard let url = ep.url() else { return "" }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            if let key = apiKey, !key.isEmpty, !ep.apiKeyHeaderName.isEmpty {
+                req.addValue(ep.apiKeyPrefix + key, forHTTPHeaderField: ep.apiKeyHeaderName)
             }
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let choices = json["choices"] as? [[String: Any]] {
-                let content = (choices.first?["message"] as? [String: Any])?["content"] as? String
-                if let content, !content.isEmpty { return content }
-            }
-        } catch {
-            return ""
+            req.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.addValue("application/json", forHTTPHeaderField: "Accept")
+            let body: [String: Any] = [
+                "model": model,
+                "messages": [["role": "user", "content": prompt]],
+                "temperature": 0.2,
+                "stream": false
+            ]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return "" }
+                return Self.extractContent(from: data) ?? ""
+            } catch { return "" }
+        }
+        let candidates = [endpoint.path, "/api/chat"]
+        for p in candidates {
+            let txt = await requestOnce(path: p)
+            if !txt.isEmpty { return txt }
         }
         return ""
     }
@@ -137,4 +154,28 @@ private struct ChatResponse: Decodable {
     let choices: [Choice]?
     struct Choice: Decodable { let message: Message? }
     struct Message: Decodable { let content: String? }
+}
+
+private struct OllamaChatResponse: Decodable {
+    struct Message: Decodable { let content: String? }
+    let message: Message?
+}
+
+private extension AIService {
+    static func extractContent(from data: Data) -> String? {
+        if let openai = try? JSONDecoder().decode(ChatResponse.self, from: data), let c = openai.choices?.first?.message?.content, !(c ?? "").isEmpty {
+            return c
+        }
+        if let ollama = try? JSONDecoder().decode(OllamaChatResponse.self, from: data), let c = ollama.message?.content, !(c ?? "").isEmpty {
+            return c
+        }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let choices = json["choices"] as? [[String: Any]] {
+                let c = (choices.first? ["message"] as? [String: Any])? ["content"] as? String
+                if let c, !c.isEmpty { return c }
+            }
+            if let msg = json["message"] as? [String: Any], let c = msg["content"] as? String, !c.isEmpty { return c }
+        }
+        return nil
+    }
 }

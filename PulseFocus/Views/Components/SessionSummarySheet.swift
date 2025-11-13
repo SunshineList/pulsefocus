@@ -13,11 +13,12 @@ struct SessionSummarySheet: View {
         VStack(spacing: 16) {
             Text("复盘总结").font(.system(size: 28, weight: .bold))
             SectionCard(title: "AI 总结") {
-                if loadingReview { ProgressView().progressViewStyle(.circular) } else { Text(summaryText).font(.system(size: 17)).multilineTextAlignment(.leading) }
+                if loadingReview { ProgressView().progressViewStyle(.circular) } else { Text(SummaryParser.summary(from: summaryText)).font(.system(size: 17)).multilineTextAlignment(.leading).lineSpacing(4) }
             }
             SectionCard(title: "改进建议") {
                 if loadingReview { ProgressView().progressViewStyle(.circular) } else {
-                    VStack(alignment: .leading, spacing: 8) { ForEach(tips, id: \.self) { t in Text("• " + t) } }
+                    let list = tips.isEmpty ? SummaryParser.suggestions(from: summaryText, fallback: []) : tips
+                    VStack(alignment: .leading, spacing: 8) { ForEach(list, id: \.self) { t in Text("• " + t).fixedSize(horizontal: false, vertical: true) } }
                 }
             }
             if let c = coachAdvice {
@@ -40,33 +41,16 @@ struct SessionSummarySheet: View {
         .task { await requestReview(); await requestCoach() }
     }
     private func requestReview() async {
-        let spark = Sparkline.from(series: [])
-        let prompt = PromptFactory().review(sessionJSON: "{}", sparkline: spark)
-        if app.aiEnabled, let key = SecureStore.get("aiKey"), !key.isEmpty {
-            var endpoint = AIEndpoint(baseURL: app.aiBaseURL)
-            endpoint.apiKeyHeaderName = app.aiKeyHeaderName
-            endpoint.apiKeyPrefix = app.aiKeyPrefix
-            let ai = AIService(provider: .remote, endpoint: endpoint, model: app.aiModel, apiKey: key)
-            let result = await ai.review(summaryInput: prompt)
-            summaryText = result.0
-            tips = result.1
-            loadingReview = false
-        } else {
-            summaryText = "AI未配置或连接失败，请在设置中填写 API Key 并测试连接"
-            tips = []
-            loadingReview = false
-        }
+        let result = await AISummaryGenerator.reviewSession(Session(focusMinutes: app.focusMinutes, restMinutes: app.restMinutes, heartRateAvg: HealthManager.shared.heartRate, hrvAvg: HealthManager.shared.hrv, restingHeartRate: HealthManager.shared.restingHeartRate), app: app)
+        summaryText = result.0
+        tips = result.1
+        loadingReview = false
     }
     private func requestCoach() async {
-        if app.aiEnabled, let key = SecureStore.get("aiKey"), !key.isEmpty {
-            var endpoint = AIEndpoint(baseURL: app.aiBaseURL)
-            endpoint.apiKeyHeaderName = app.aiKeyHeaderName
-            endpoint.apiKeyPrefix = app.aiKeyPrefix
-            let ai = AIService(provider: .remote, endpoint: endpoint, model: app.aiModel, apiKey: key)
+        if AIFactory.available(app: app) {
+            let ai = AIFactory.make(app: app)
             coachAdvice = await ai.coach(task: "当前任务", rhr: HealthManager.shared.restingHeartRate, hrv: HealthManager.shared.hrv, hrAvg: HealthManager.shared.heartRate)
-            loadingCoach = false
-        } else {
-            loadingCoach = false
         }
+        loadingCoach = false
     }
 }

@@ -24,7 +24,7 @@ struct SettingsView: View {
                     Toggle("启用云端 AI 建议", isOn: $app.aiEnabled)
                     if app.aiEnabled {
                         VerticalField(title: "服务地址") {
-                            TextField("https://api.openai.com", text: $app.aiBaseURL)
+                            TextField("https://api.moonshot.cn", text: $app.aiBaseURL)
                                 .textContentType(.URL)
                                 .keyboardType(.URL)
                                 .textInputAutocapitalization(.never)
@@ -33,16 +33,19 @@ struct SettingsView: View {
                                 .padding(.vertical, 6)
                         }
                         VerticalField(title: "模型名") {
-                            TextField("gpt-4o-mini", text: $app.aiModel)
+                            TextField("kimi-k2-turbo-preview", text: $app.aiModel)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .textFieldStyle(.roundedBorder)
                                 .padding(.vertical, 6)
                         }
-                        VerticalField(title: "API Key") {
-                            SecureField("你的 Key", text: $aiKeyInput)
-                                .textFieldStyle(.roundedBorder)
-                                .padding(.vertical, 6)
+                        Toggle("使用 API Key", isOn: $app.aiRequireKey)
+                        if app.aiRequireKey {
+                            VerticalField(title: "API Key") {
+                                SecureField("你的 Key", text: $aiKeyInput)
+                                    .textFieldStyle(.roundedBorder)
+                                    .padding(.vertical, 6)
+                            }
                         }
                         DisclosureGroup("高级") {
                             VerticalField(title: "Key Header 名称") {
@@ -52,6 +55,11 @@ struct SettingsView: View {
                             }
                             VerticalField(title: "Key 前缀") {
                                 TextField("Bearer ", text: $app.aiKeyPrefix)
+                                    .textFieldStyle(.roundedBorder)
+                                    .padding(.vertical, 6)
+                            }
+                            VerticalField(title: "API 路径") {
+                                TextField("/v1/chat/completions", text: $app.aiPath)
                                     .textFieldStyle(.roundedBorder)
                                     .padding(.vertical, 6)
                             }
@@ -106,16 +114,18 @@ extension SettingsView {
         aiTestLoading = true
         defer { aiTestLoading = false }
         let entered = aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard app.aiEnabled, !entered.isEmpty else {
-            aiTestStatus = "未配置 Key"
-            aiTestContent = "请填写 API Key 后再测试"
-            showTestAlert = true
-            return
-        }
         var endpoint = AIEndpoint(baseURL: app.aiBaseURL)
         endpoint.apiKeyHeaderName = app.aiKeyHeaderName
         endpoint.apiKeyPrefix = app.aiKeyPrefix
-        let ai = AIService(provider: .remote, endpoint: endpoint, model: app.aiModel, apiKey: entered)
+        endpoint.path = app.aiPath
+        let keyToUse = app.aiRequireKey ? entered : nil
+        if app.aiRequireKey && (keyToUse ?? "").isEmpty {
+            aiTestStatus = "未配置 Key"
+            aiTestContent = "请填写 API Key 或打开“无需 API Key”"
+            showTestAlert = true
+            return
+        }
+        let ai = AIService(provider: .remote, endpoint: endpoint, model: app.aiModel, apiKey: keyToUse)
         let (ok, txt) = await ai.testConnectivity()
         aiTestStatus = ok ? "连接成功" : "连接失败"
         aiTestContent = txt

@@ -1,5 +1,8 @@
 import SwiftUI
 import HealthKit
+import Combine
+import WatchConnectivity
+import WatchKit
 import WatchConnectivity
 
 struct WatchHomeView: View {
@@ -11,6 +14,7 @@ struct WatchHomeView: View {
             HStack {
                 Button("开始") { controller.start() }
                 Button(controller.running ? "暂停" : "继续") { controller.toggle() }
+                Button("重置") { controller.reset() }
             }
         }.onAppear { controller.setup() }
     }
@@ -25,9 +29,23 @@ final class WatchSessionController: ObservableObject {
     private var hrQuery: HKAnchoredObjectQuery?
     private var workoutSession: HKWorkoutSession?
     private var wc: WCSession? = WCSession.isSupported() ? WCSession.default : nil
+    private var tick: AnyCancellable?
     func setup() { requestHK() }
-    func start() { remaining = 25*60; running = true; startWorkout(); sendState("start") }
-    func toggle() { running.toggle(); sendState(running ? "resume" : "pause") }
+    func start() {
+        remaining = max(1.0, remaining > 0 ? remaining : TimeInterval(25*60))
+        running = true
+        startWorkout()
+        startTimer()
+        sendState("start")
+        WKInterfaceDevice.current().play(.start)
+    }
+    func toggle() {
+        if running { pauseTimer(); running = false; sendState("pause"); WKInterfaceDevice.current().play(.directionDown) }
+        else { running = true; startTimer(); sendState("resume"); WKInterfaceDevice.current().play(.directionUp) }
+    }
+    func reset() {
+        pauseTimer(); remaining = 0; running = false; workoutSession?.end(); sendState("reset")
+    }
     private func requestHK() {
         let types: Set = [HKObjectType.quantityType(forIdentifier: .heartRate)!]
         Task {
@@ -58,6 +76,15 @@ final class WatchSessionController: ObservableObject {
         workoutSession = try? HKWorkoutSession(healthStore: health, configuration: config)
         workoutSession?.startActivity(with: Date())
     }
+    private func startTimer() {
+        tick?.cancel()
+        tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
+            guard let self else { return }
+            guard self.running else { return }
+            if self.remaining > 0 { self.remaining -= 1 } else { self.pauseTimer(); self.running = false; WKInterfaceDevice.current().play(.success); self.sendState("complete") }
+        }
+    }
+    private func pauseTimer() { tick?.cancel(); tick = nil }
     private func sendState(_ state: String) {
         guard wc?.isReachable == true else { return }
         wc?.sendMessage(["state": state], replyHandler: nil, errorHandler: nil)
