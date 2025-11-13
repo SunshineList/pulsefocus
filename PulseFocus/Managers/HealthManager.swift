@@ -2,6 +2,7 @@ import Foundation
 import HealthKit
 import Combine
 
+@MainActor
 final class HealthManager: ObservableObject {
     static let shared = HealthManager()
     private let store = HKHealthStore()
@@ -12,6 +13,8 @@ final class HealthManager: ObservableObject {
     private var hrvQuery: HKAnchoredObjectQuery?
     private var cancellables: Set<AnyCancellable> = []
     var simulated: Bool = true
+    private var externalOverrideUntil: Date? = nil
+    func setExternalOverride(seconds: Int) { externalOverrideUntil = Date().addingTimeInterval(TimeInterval(seconds)) }
 
     func requestAuthorization() async throws {
         let types: Set = [
@@ -46,13 +49,13 @@ final class HealthManager: ObservableObject {
         let rhrType = HKObjectType.quantityType(forIdentifier: .restingHeartRate)!
         let predicate = HKQuery.predicateForSamples(withStart: Calendar.current.date(byAdding: .hour, value: -12, to: .now), end: .now)
         hrQuery = HKAnchoredObjectQuery(type: hrType, predicate: predicate, anchor: nil, limit: HKObjectQueryNoLimit) { _, samples, _, _, _ in
-            self.updateHR(samples)
+            DispatchQueue.main.async { self.updateHR(samples) }
         }
-        hrQuery?.updateHandler = { _, samples, _, _, _ in self.updateHR(samples) }
+        hrQuery?.updateHandler = { _, samples, _, _, _ in DispatchQueue.main.async { self.updateHR(samples) } }
         hrvQuery = HKAnchoredObjectQuery(type: hrvType, predicate: predicate, anchor: nil, limit: HKObjectQueryNoLimit) { _, samples, _, _, _ in
-            self.updateHRV(samples)
+            DispatchQueue.main.async { self.updateHRV(samples) }
         }
-        hrvQuery?.updateHandler = { _, samples, _, _, _ in self.updateHRV(samples) }
+        hrvQuery?.updateHandler = { _, samples, _, _, _ in DispatchQueue.main.async { self.updateHRV(samples) } }
         store.execute(hrQuery!)
         store.execute(hrvQuery!)
         fetchRHR(rhrType)
@@ -61,6 +64,7 @@ final class HealthManager: ObservableObject {
     private func updateHR(_ samples: [HKSample]?) {
         guard let samples = samples as? [HKQuantitySample], let last = samples.last else { return }
         let bpm = last.quantity.doubleValue(for: HKUnit(from: "count/min"))
+        if let until = externalOverrideUntil, until > Date() { return }
         heartRate = bpm
     }
 
@@ -75,9 +79,8 @@ final class HealthManager: ObservableObject {
         let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
         let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1, sortDescriptors: sort) { _, samples, _ in
             guard let s = samples?.first as? HKQuantitySample else { return }
-            self.restingHeartRate = s.quantity.doubleValue(for: HKUnit(from: "count/min"))
+            DispatchQueue.main.async { self.restingHeartRate = s.quantity.doubleValue(for: HKUnit(from: "count/min")) }
         }
         store.execute(query)
     }
 }
-

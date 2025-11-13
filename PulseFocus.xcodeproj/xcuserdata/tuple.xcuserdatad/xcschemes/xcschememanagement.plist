@@ -7,12 +7,37 @@
 		<key>PulseFocus.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
+			<integer>2</integer>
+		</dict>
+		<key>PulseFocusLiveActivityExtension.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+			<key>orderHint</key>
 			<integer>1</integer>
 		</dict>
 		<key>WatchPulseFocus Watch App.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>0</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>687E41042EC5D3C600707E39</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>68B3F5C82EC4823600C61D8A</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>68C7A8492EC597FA0062793F</key>
+		<dict>
+			<key>primary</key>
+			<true/>
 		</dict>
 	</dict>
 </dict>

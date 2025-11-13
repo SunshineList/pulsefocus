@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 
+@MainActor
 final class AppState: ObservableObject {
     @Published var mode: FocusMode = .adaptive
     @Published var phase: SessionPhase = .idle
@@ -19,6 +20,32 @@ final class AppState: ObservableObject {
     @Published var aiKeyPrefix: String = "Bearer "
     @Published var aiRequireKey: Bool = false
     @Published var aiPath: String = "/v1/chat/completions"
+    private var cancellables: Set<AnyCancellable> = []
+    init() {
+        let d = UserDefaults.standard
+        if let m = FocusMode(rawValue: d.string(forKey: "mode") ?? mode.rawValue) { mode = m }
+        focusMinutes = d.object(forKey: "focusMinutes") as? Int ?? focusMinutes
+        restMinutes = d.object(forKey: "restMinutes") as? Int ?? restMinutes
+        isSimulatedHR = d.object(forKey: "isSimulatedHR") as? Bool ?? isSimulatedHR
+        aiEnabled = d.object(forKey: "aiEnabled") as? Bool ?? aiEnabled
+        aiBaseURL = d.string(forKey: "aiBaseURL") ?? aiBaseURL
+        aiModel = d.string(forKey: "aiModel") ?? aiModel
+        aiKeyHeaderName = d.string(forKey: "aiKeyHeaderName") ?? aiKeyHeaderName
+        aiKeyPrefix = d.string(forKey: "aiKeyPrefix") ?? aiKeyPrefix
+        aiRequireKey = d.object(forKey: "aiRequireKey") as? Bool ?? aiRequireKey
+        aiPath = d.string(forKey: "aiPath") ?? aiPath
+        $mode.sink { d.set($0.rawValue, forKey: "mode") }.store(in: &cancellables)
+        $focusMinutes.sink { d.set($0, forKey: "focusMinutes") }.store(in: &cancellables)
+        $restMinutes.sink { d.set($0, forKey: "restMinutes") }.store(in: &cancellables)
+        $isSimulatedHR.sink { d.set($0, forKey: "isSimulatedHR") }.store(in: &cancellables)
+        $aiEnabled.sink { d.set($0, forKey: "aiEnabled") }.store(in: &cancellables)
+        $aiBaseURL.sink { d.set($0, forKey: "aiBaseURL") }.store(in: &cancellables)
+        $aiModel.sink { d.set($0, forKey: "aiModel") }.store(in: &cancellables)
+        $aiKeyHeaderName.sink { d.set($0, forKey: "aiKeyHeaderName") }.store(in: &cancellables)
+        $aiKeyPrefix.sink { d.set($0, forKey: "aiKeyPrefix") }.store(in: &cancellables)
+        $aiRequireKey.sink { d.set($0, forKey: "aiRequireKey") }.store(in: &cancellables)
+        $aiPath.sink { d.set($0, forKey: "aiPath") }.store(in: &cancellables)
+    }
 }
 
 struct AIAdvice: Equatable {

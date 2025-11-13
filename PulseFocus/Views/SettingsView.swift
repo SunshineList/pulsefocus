@@ -79,6 +79,7 @@ struct SettingsView: View {
         }
         .alert("AI 测试结果", isPresented: $showTestAlert) { Button("好的", role: .cancel) {} } message: { Text(aiTestContent.isEmpty ? "无返回内容" : aiTestContent) }
         .background(LinearGradient(colors: [Color.green.opacity(0.15), Color.purple.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea())
+        .onAppear { aiKeyInput = SecureStore.get("aiKey") ?? "" }
     }
 }
 

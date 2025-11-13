@@ -1,19 +1,26 @@
 import SwiftUI
 
 struct SplashBrandingView: View {
+    @State private var appear: Bool = false
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [Color.green.opacity(0.35), Color.purple.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
-            VStack(spacing: 16) {
-                Image("LaunchArt")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 280)
-                    .shadow(radius: 12, x: 0, y: 6)
-                    .opacity(0.96)
-                Text("PulseFocus").font(.system(size: 28, weight: .bold))
-                Text("心率自适应番茄钟").font(.callout).foregroundStyle(.secondary)
+        GeometryReader { geo in
+            ZStack {
+                LinearGradient(colors: [Color.green, Color.purple], startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
+                VStack(spacing: 18) {
+                    let targetWidth = min(geo.size.width * 0.72, 420)
+                    Image("LaunchArt")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: targetWidth)
+                        .shadow(radius: 14, x: 0, y: 8)
+                        .opacity(appear ? 1 : 0.0)
+                        .scaleEffect(appear ? 1.0 : 0.92)
+                    Text("PulseFocus").font(.system(size: 30, weight: .bold))
+                    Text("心率自适应番茄钟").font(.callout).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .onAppear { withAnimation(.easeOut(duration: 0.6)) { appear = true } }
     }
 }

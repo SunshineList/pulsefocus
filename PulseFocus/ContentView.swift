@@ -30,7 +30,7 @@ struct RootView: View {
             Task { try? await HealthManager.shared.requestAuthorization() }
             Task { await NotificationManager().request() }
             ConnectivityManager.shared.activate()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { withAnimation { showSplash = false } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { withAnimation(.easeInOut(duration: 0.5)) { showSplash = false } }
         }
     }
 }
